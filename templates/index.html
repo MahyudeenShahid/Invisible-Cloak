@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Invisible Cloak</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+  <header>
+    <div class="logo">&#x1F9E5; Invisible Cloak</div>
+    <span id="status-badge" class="badge badge-off">OFF</span>
+  </header>
+
+  <main>
+    <!-- LEFT: Video Feed -->
+    <section class="video-section">
+      <div class="video-wrapper">
+        <img id="video-feed" src="/video_feed" alt="Camera Feed" title="Click to pick cloak color"/>
+        <div id="pick-tooltip">Click to pick color</div>
+      </div>
+      <div class="video-hint">&#128073; Click anywhere on the video to auto-detect your cloak color</div>
+    </section>
+
+    <!-- RIGHT: Controls -->
+    <aside class="controls">
+
+      <!-- Actions -->
+      <div class="card">
+        <h2>&#x1F3AC; Actions</h2>
+
+        <!-- Mode Toggle -->
+        <div class="mode-toggle">
+          <button class="mode-btn active" id="mode-invisible" data-mode="invisible">&#x1F576;&#xFE0F; Invisible</button>
+          <button class="mode-btn" id="mode-virtual" data-mode="virtual">&#x1F304; Teleport</button>
+        </div>
+
+        <!-- Invisible Mode: capture background -->
+        <div id="panel-invisible">
+          <button class="btn btn-secondary" id="btn-capture">&#128247; Capture Background</button>
+        </div>
+
+        <!-- Virtual Background Mode -->
+        <div id="panel-virtual" style="display:none">
+          <div class="bg-grid">
+            {% for scene in scenes %}
+            <button class="bg-tile" data-scene="{{ scene.id }}"
+              style="background-image:url('/static/backgrounds/{{ scene.id }}.jpg')">
+              <span>{{ scene.label }}</span>
+            </button>
+            {% endfor %}
+          </div>
+          <label class="upload-label">
+            &#128247; Upload your own
+            <input type="file" id="upload-bg" accept="image/*" style="display:none"/>
+          </label>
+          <div id="selected-bg-name" class="selected-bg"></div>
+        </div>
+
+        <button class="btn btn-primary" id="btn-toggle">&#9654; Start</button>
+        <div id="action-msg" class="msg"></div>
+      </div>
+
+      <!-- Effect -->
+      <div class="card">
+        <h2>&#x2728; Effect</h2>
+        <div class="effect-grid">
+          {% for effect in effects %}
+          <button class="effect-btn {% if loop.first %}active{% endif %}" data-effect="{{ effect }}">{{ effect }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- HSV Sliders -->
+      <div class="card">
+        <h2>&#x1F3A8; Color Range (HSV)</h2>
+        <div class="sensitivity-row">
+          <label>Sensitivity: <span id="sens-val">20</span></label>
+          <input type="range" id="sensitivity" min="1" max="60" value="20"/>
+        </div>
+        <div class="slider-group">
+          {% for s in [('H Min','h_min',0,179,0),('H Max','h_max',0,179,179),('S Min','s_min',0,255,0),('S Max','s_max',0,255,255),('V Min','v_min',0,255,0),('V Max','v_max',0,255,255)] %}
+          <div class="slider-row">
+            <label>{{ s[0] }}: <span id="lbl-{{ s[1] }}">{{ s[4] }}</span></label>
+            <input type="range" id="{{ s[1] }}" min="{{ s[2] }}" max="{{ s[3] }}" value="{{ s[4] }}"/>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Profiles -->
+      <div class="card">
+        <h2>&#x1F4BE; Color Profiles</h2>
+        <div class="profile-input-row">
+          <input type="text" id="profile-name" placeholder="Profile name..." maxlength="30"/>
+          <button class="btn btn-small btn-secondary" id="btn-save-profile">Save</button>
+        </div>
+        <div id="profiles-list" class="profiles-list">
+          <span class="no-profiles">No saved profiles yet.</span>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
