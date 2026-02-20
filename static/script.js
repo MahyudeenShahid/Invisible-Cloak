@@ -3,6 +3,7 @@
 
   const sliderIds = ['h_min', 'h_max', 's_min', 's_max', 'v_min', 'v_max'];
   let debounceTimer = null;
+  let currentRangeIdx = 0;
 
   // ─── Utility ────────────────────────────────────────────────────
   function showMsg(text, isError = false) {
@@ -36,6 +37,7 @@
 
   function pushHSV() {
     post('/set_hsv', {
+      idx: currentRangeIdx,
       h_min: +$('h_min').value, h_max: +$('h_max').value,
       s_min: +$('s_min').value, s_max: +$('s_max').value,
       v_min: +$('v_min').value, v_max: +$('v_max').value,
@@ -48,6 +50,89 @@
         if ($(k)) $(k).value = data[k];
         if ($('lbl-' + k)) $('lbl-' + k).textContent = data[k];
       }
+    });
+  }
+
+  // ─── Multi-Color Cloak ────────────────────────────────────────────
+  function hsvToHsl(h, s, v) {
+    // OpenCV HSV (h 0-179, s 0-255, v 0-255) to CSS hsl string for swatches
+    const hDeg = h * 2;
+    const sSat = s / 255;
+    const vPct = v / 255;
+    const l = vPct * (1 - sSat / 2);
+    const sHsl = (l === 0 || l === 1) ? 0 : (vPct - l) / Math.min(l, 1 - l);
+    return `hsl(${hDeg}, ${Math.round(sHsl * 100)}%, ${Math.max(20, Math.round(l * 100))}%)`;
+  }
+
+  function renderColorRanges(ranges, activeIdx) {
+    currentRangeIdx = activeIdx;
+    const container = $('color-chips');
+    container.innerHTML = ranges.map((cr, i) => {
+      const hMid = (cr.hsv_min[0] + cr.hsv_max[0]) / 2;
+      const sMid = (cr.hsv_min[1] + cr.hsv_max[1]) / 2;
+      const vMid = (cr.hsv_min[2] + cr.hsv_max[2]) / 2;
+      const swatch = hsvToHsl(hMid, sMid, vMid);
+      return `
+        <div class="color-chip${i === activeIdx ? ' active' : ''}" data-idx="${i}" title="Color ${i + 1} — click to edit sliders">
+          <div class="chip-swatch" style="background:${swatch}"></div>
+          <span>Color ${i + 1}</span>
+          ${ranges.length > 1 ? `<button class="chip-del" data-idx="${i}" title="Remove">×</button>` : ''}
+        </div>`;
+    }).join('');
+
+    container.querySelectorAll('.color-chip').forEach(chip => {
+      chip.addEventListener('click', async e => {
+        if (e.target.classList.contains('chip-del')) return;
+        const idx = +chip.dataset.idx;
+        const d = await post('/set_active_range', { idx });
+        if (d.status === 'ok') {
+          currentRangeIdx = d.active_idx;
+          container.querySelectorAll('.color-chip').forEach(c =>
+            c.classList.toggle('active', +c.dataset.idx === idx));
+          applySliders({
+            h_min: d.hsv_min[0], s_min: d.hsv_min[1], v_min: d.hsv_min[2],
+            h_max: d.hsv_max[0], s_max: d.hsv_max[1], v_max: d.hsv_max[2],
+          });
+        }
+      });
+    });
+
+    container.querySelectorAll('.chip-del').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const idx = +btn.dataset.idx;
+        const d = await post('/delete_color_range', { idx });
+        if (d.status === 'ok') {
+          renderColorRanges(d.ranges, d.active_idx);
+          const ar = d.ranges[d.active_idx];
+          applySliders({
+            h_min: ar.hsv_min[0], s_min: ar.hsv_min[1], v_min: ar.hsv_min[2],
+            h_max: ar.hsv_max[0], s_max: ar.hsv_max[1], v_max: ar.hsv_max[2],
+          });
+          showMsg('Color slot removed.');
+        }
+      });
+    });
+  }
+
+  $('btn-add-color').addEventListener('click', async () => {
+    const d = await post('/add_color_range', {});
+    if (d.status === 'ok') {
+      renderColorRanges(d.ranges, d.active_idx);
+      applySliders({ h_min: 0, h_max: 179, s_min: 0, s_max: 255, v_min: 0, v_max: 255 });
+      showMsg(`Color ${d.active_idx + 1} added — click the new cloak color on the video!`);
+    } else {
+      showMsg(d.message, true);
+    }
+  });
+
+  async function initColorRanges() {
+    const d = await (await fetch('/color_ranges')).json();
+    renderColorRanges(d.ranges, d.active_idx);
+    const ar = d.ranges[d.active_idx];
+    applySliders({
+      h_min: ar.hsv_min[0], s_min: ar.hsv_min[1], v_min: ar.hsv_min[2],
+      h_max: ar.hsv_max[0], s_max: ar.hsv_max[1], v_max: ar.hsv_max[2],
     });
   }
 
@@ -267,11 +352,16 @@
     const d = await post('/pick_color', { x, y, sensitivity: sens });
     if (d.status === 'ok') {
       applySliders(d);
+      // Refresh the chip swatch for the active color slot
+      (async () => {
+        const rd = await (await fetch('/color_ranges')).json();
+        renderColorRanges(rd.ranges, rd.active_idx);
+      })();
       // Show color dot in tooltip
       const hue = Math.round(d.hsv[0] * 2); // OpenCV H is 0-179 → CSS hue 0-360
-      tooltip.innerHTML = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:hsl(${hue},${d.hsv[1]/255*100|0}%,${d.hsv[2]/255*60+20|0}%);vertical-align:middle;margin-right:5px;border:1px solid #aaa"></span>Color picked!`;
+      tooltip.innerHTML = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:hsl(${hue},${d.hsv[1]/255*100|0}%,${d.hsv[2]/255*60+20|0}%);vertical-align:middle;margin-right:5px;border:1px solid #aaa"></span>Color ${currentRangeIdx + 1} picked!`;
       clearTimeout(tooltip._t);
-      tooltip._t = setTimeout(() => { tooltip.innerHTML = 'Click to pick color'; }, 3000);
+      tooltip._t = setTimeout(() => { tooltip.innerHTML = '🎯 Aim & Click to Select Color'; }, 3000);
     }
   });
 
@@ -302,10 +392,19 @@
       btn.addEventListener('click', async () => {
         const d = await post('/load_profile', { name: btn.dataset.name });
         if (d.status === 'ok') {
-          applySliders(d.hsv_min ? {
-            h_min: d.hsv_min[0], s_min: d.hsv_min[1], v_min: d.hsv_min[2],
-            h_max: d.hsv_max[0], s_max: d.hsv_max[1], v_max: d.hsv_max[2],
-          } : {});
+          if (d.color_ranges) {
+            renderColorRanges(d.color_ranges, d.active_idx || 0);
+            const ar = d.color_ranges[d.active_idx || 0];
+            applySliders({
+              h_min: ar.hsv_min[0], s_min: ar.hsv_min[1], v_min: ar.hsv_min[2],
+              h_max: ar.hsv_max[0], s_max: ar.hsv_max[1], v_max: ar.hsv_max[2],
+            });
+          } else if (d.hsv_min) {
+            applySliders({
+              h_min: d.hsv_min[0], s_min: d.hsv_min[1], v_min: d.hsv_min[2],
+              h_max: d.hsv_max[0], s_max: d.hsv_max[1], v_max: d.hsv_max[2],
+            });
+          }
           // Set effect button
           document.querySelectorAll('.effect-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.effect === (d.effect || 'none'));
@@ -334,6 +433,7 @@
     }
   });
 
-  // Load profiles on start
+  // Load initial state
+  initColorRanges();
   loadProfiles();
 })();

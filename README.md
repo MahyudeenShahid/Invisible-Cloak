@@ -1,6 +1,7 @@
+
 # 🧥 Invisible Cloak
 
-> A real-time Harry Potter-style invisibility cloak effect powered by Python, OpenCV, and a modern web interface. Now with **Teleport Mode** — replace your cloak with a virtual scene like a beach, space, or city!
+> A real-time Harry Potter-style invisibility cloak effect powered by Python, OpenCV, and a modern web interface. Now with **Teleport Mode** — and **multi-color cloak support**: use up to 6 different cloak colors at once!
 
 ![InvisibleGif](https://github.com/abd-shoumik/Invisible-Cloak/blob/master/Invisible.gif)
 
@@ -19,25 +20,28 @@
 
 ---
 
+
 ## 💡 How It Works
 
 The invisibility effect works using **HSV (Hue, Saturation, Value) color masking**:
 
 1. A background frame is captured when the cloak is absent.
-2. Each new frame is analyzed in HSV color space to detect the cloak color.
-3. Pixels matching the cloak color are replaced with the selected background.
+2. Each new frame is analyzed in HSV color space to detect **one or more cloak colors** (multi-color support).
+3. Pixels matching any cloak color are replaced with the selected background.
 4. The result is a seamless effect — the person holding the cloak appears to vanish or teleport.
 
 ---
+
 
 ## 🎭 Modes
 
 | Mode | Description |
 |---|---|
-| 🕶️ **Invisible** | Classic mode — cloak area shows the real captured background |
+| 🕶️ **Invisible** | Classic mode — cloak area shows the real captured background. Now supports **multiple cloak colors** at once! |
 | 🌄 **Teleport** | Cloak area is replaced with a virtual scene (beach, space, city, etc.) |
 
 In **Teleport mode**, pick from 5 built-in scenes or upload your own photo as the background.
+In both modes, you can add up to 6 different cloak colors (e.g. red + blue + green) and all will be made invisible/teleported simultaneously.
 
 ---
 
@@ -92,19 +96,22 @@ The main entry point for the **web application**. It:
 
 ---
 
+
 ### `templates/index.html` — Web UI Layout
 The HTML template served by Flask. It contains:
 - A **live video feed** panel (click anywhere to auto-pick a color).
 - A **mode toggle** (Invisible / Teleport).
 - A **scene grid** (5 built-in backgrounds + custom upload) shown in Teleport mode.
-- **HSV sliders** to fine-tune the cloak color range.
+- **Multi-color cloak chips**: add, select, and remove up to 6 cloak colors. Each chip shows a color swatch and can be edited or deleted.
+- **HSV sliders** to fine-tune the currently selected cloak color range.
 - A **sensitivity slider** to control color tolerance when clicking to pick.
 - An **effect selector** (none, pixelate, blur, cartoon).
 - Buttons to **capture background**, **start/stop** the effect.
-- A **profiles panel** to save, load, and delete named color settings.
+- A **profiles panel** to save, load, and delete named color settings (now saves all cloak colors).
 - A status badge (ON/OFF) in the header.
 
 ---
+
 
 ### `static/style.css` — Web UI Styles
 A clean, minimal CSS stylesheet that gives the web app a modern look:
@@ -112,19 +119,22 @@ A clean, minimal CSS stylesheet that gives the web app a modern look:
 - Mode toggle button group with active state styling.
 - Scene grid tiles with background image previews.
 - Dashed upload button and selected background indicator.
+- **Multi-color chips**: glassmorphism color chips, swatches, and delete buttons.
 - Custom-styled sliders, buttons, cards, and profile list items.
 - Color-coded status indicators and smooth hover/transition effects.
 
 ---
+
 
 ### `static/script.js` — Web UI JavaScript
 Handles all frontend interactivity without any frameworks:
 - Mode toggle switches between Invisible and Teleport panels.
 - Scene tile clicks send the selected background to the server.
 - Custom image upload via `FormData` and `/upload_bg`.
-- Listens to slider changes and debounces HSV updates.
-- Handles button clicks for capture, toggle, effect, and profiles.
-- Sends `(x, y)` click coordinates to auto-pick HSV values from the video.
+- **Multi-color cloak logic**: add, select, and remove color chips; each chip controls its own HSV sliders and video click-to-pick.
+- Listens to slider changes and debounces HSV updates for the active color slot.
+- Handles button clicks for capture, toggle, effect, and profiles (now saves/loads all cloak colors).
+- Sends `(x, y)` click coordinates to auto-pick HSV values for the selected color slot.
 - Dynamically renders the saved profiles list with load/delete buttons.
 - Updates slider labels and the status badge in real time.
 
@@ -160,11 +170,12 @@ A PyQt5 GUI tool for calibrating the cloak color. It:
 
 ---
 
+
 ### `requirements.txt` — Python Dependencies
 
 | Package | Purpose |
 |---|---|
-| `opencv-python` | Webcam capture, image processing, HSV masking |
+| `opencv-python` | Webcam capture, image processing, HSV masking (multi-color support) |
 | `opencv-contrib-python` | Extra OpenCV modules |
 | `numpy` | Array operations for frame manipulation |
 | `flask` | Web server and API for the web app |
@@ -224,17 +235,20 @@ python invisible.py
 
 ## 🌐 Using the Web App
 
-### 🕶️ Invisible Mode
+
+### 🕶️ Invisible Mode (Multi-Color)
 
 | Step | Action |
 |---|---|
 | 1 | Stand away from the camera and click **Capture Background** |
-| 2 | Click on your cloak in the live video to auto-detect its color |
-| 3 | Adjust the **Sensitivity** slider if needed |
-| 4 | Fine-tune the HSV sliders manually for better accuracy |
-| 5 | Choose a fun **effect** (pixelate, blur, cartoon) |
-| 6 | Save settings as a **profile** for reuse |
-| 7 | Click **Start** and hold up your cloak! |
+| 2 | Click on your cloak in the live video to auto-detect its color (for the first color slot) |
+| 3 | Click **＋ Add Color** to add a second/third cloak color (up to 6) |
+| 4 | Click on the new cloak color in the video to auto-detect it (each chip is editable) |
+| 5 | Adjust the **Sensitivity** slider if needed |
+| 6 | Fine-tune the HSV sliders for each color slot manually for better accuracy |
+| 7 | Choose a fun **effect** (pixelate, blur, cartoon) |
+| 8 | Save settings as a **profile** for reuse (all cloak colors are saved) |
+| 9 | Click **Start** and hold up your cloak(s)! |
 
 ### 🌄 Teleport Mode
 
@@ -248,7 +262,8 @@ python invisible.py
 
 ---
 
-*Say **Evanesco** 🧙 and disappear — or teleport to the beach!* 🏖️
+
+*Say **Evanesco** 🧙 and disappear — with any color cloak!*
 
 ---
 

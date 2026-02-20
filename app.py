@@ -48,8 +48,10 @@ state = {
     'cap': None,
     'background': None,
     'running': False,
-    'hsv_min': [0, 0, 0],
-    'hsv_max': [179, 255, 255],
+    'color_ranges': [
+        {'hsv_min': [0, 0, 0], 'hsv_max': [179, 255, 255]},
+    ],
+    'active_range_idx': 0,
     'effect': 'none',
     'frame': None,
     'raw_frame': None,        # latest unprocessed camera frame
@@ -238,7 +240,10 @@ def camera_thread_fn():
 
                 if bg_src is not None:
                     hsv = cv2.cvtColor(raw, cv2.COLOR_BGR2HSV)
-                    mask = cv2.inRange(hsv, np.array(state['hsv_min']), np.array(state['hsv_max']))
+                    mask = np.zeros(hsv.shape[:2], np.uint8)
+                    for _cr in state['color_ranges']:
+                        _m = cv2.inRange(hsv, np.array(_cr['hsv_min']), np.array(_cr['hsv_max']))
+                        mask = cv2.bitwise_or(mask, _m)
                     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=2)
                     mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, np.ones((5, 5), np.uint8), iterations=1)
                     mask = cv2.GaussianBlur(mask, (7, 7), 0)
@@ -439,8 +444,10 @@ def bg_status():
 @app.route('/set_hsv', methods=['POST'])
 def set_hsv():
     data = request.json
-    state['hsv_min'] = [int(data['h_min']), int(data['s_min']), int(data['v_min'])]
-    state['hsv_max'] = [int(data['h_max']), int(data['s_max']), int(data['v_max'])]
+    idx = int(data.get('idx', state['active_range_idx']))
+    idx = max(0, min(idx, len(state['color_ranges']) - 1))
+    state['color_ranges'][idx]['hsv_min'] = [int(data['h_min']), int(data['s_min']), int(data['v_min'])]
+    state['color_ranges'][idx]['hsv_max'] = [int(data['h_max']), int(data['s_max']), int(data['v_max'])]
     return jsonify({'status': 'ok'})
 
 
@@ -480,8 +487,9 @@ def pick_color():
         'v_max': min(255, v + sens * 2),
         'hsv': [h, s, v],
     }
-    state['hsv_min'] = [result['h_min'], result['s_min'], result['v_min']]
-    state['hsv_max'] = [result['h_max'], result['s_max'], result['v_max']]
+    idx = state['active_range_idx']
+    state['color_ranges'][idx]['hsv_min'] = [result['h_min'], result['s_min'], result['v_min']]
+    state['color_ranges'][idx]['hsv_max'] = [result['h_max'], result['s_max'], result['v_max']]
     return jsonify({'status': 'ok', **result})
 
 
@@ -503,8 +511,9 @@ def save_profile():
         with open(PROFILES_FILE) as f:
             profiles = json.load(f)
     profiles[name] = {
-        'hsv_min': state['hsv_min'],
-        'hsv_max': state['hsv_max'],
+        'color_ranges': state['color_ranges'],
+        'hsv_min': state['color_ranges'][0]['hsv_min'],
+        'hsv_max': state['color_ranges'][0]['hsv_max'],
         'effect': state['effect'],
     }
     with open(PROFILES_FILE, 'w') as f:
@@ -520,10 +529,13 @@ def load_profile():
             profiles = json.load(f)
         if name in profiles:
             p = profiles[name]
-            state['hsv_min'] = p['hsv_min']
-            state['hsv_max'] = p['hsv_max']
+            if 'color_ranges' in p:
+                state['color_ranges'] = p['color_ranges']
+            else:
+                state['color_ranges'] = [{'hsv_min': p.get('hsv_min', [0,0,0]), 'hsv_max': p.get('hsv_max', [179,255,255])}]
+            state['active_range_idx'] = 0
             state['effect'] = p.get('effect', 'none')
-            return jsonify({'status': 'ok', **p})
+            return jsonify({'status': 'ok', 'color_ranges': state['color_ranges'], 'active_idx': 0, **p})
     return jsonify({'status': 'error', 'message': 'Profile not found'})
 
 
@@ -539,6 +551,44 @@ def delete_profile():
                 json.dump(profiles, f, indent=2)
             return jsonify({'status': 'ok', 'profiles': profiles})
     return jsonify({'status': 'error', 'message': 'Profile not found'})
+
+
+@app.route('/color_ranges', methods=['GET'])
+def get_color_ranges():
+    return jsonify({
+        'status': 'ok',
+        'ranges': state['color_ranges'],
+        'active_idx': state['active_range_idx'],
+    })
+
+
+@app.route('/add_color_range', methods=['POST'])
+def add_color_range():
+    if len(state['color_ranges']) >= 6:
+        return jsonify({'status': 'error', 'message': 'Maximum 6 colors allowed'})
+    state['color_ranges'].append({'hsv_min': [0, 0, 0], 'hsv_max': [179, 255, 255]})
+    new_idx = len(state['color_ranges']) - 1
+    state['active_range_idx'] = new_idx
+    return jsonify({'status': 'ok', 'ranges': state['color_ranges'], 'active_idx': new_idx})
+
+
+@app.route('/delete_color_range', methods=['POST'])
+def delete_color_range():
+    idx = int(request.json.get('idx', 0))
+    if len(state['color_ranges']) <= 1:
+        return jsonify({'status': 'error', 'message': 'Must keep at least one color'})
+    state['color_ranges'].pop(idx)
+    state['active_range_idx'] = max(0, min(state['active_range_idx'], len(state['color_ranges']) - 1))
+    return jsonify({'status': 'ok', 'ranges': state['color_ranges'], 'active_idx': state['active_range_idx']})
+
+
+@app.route('/set_active_range', methods=['POST'])
+def set_active_range():
+    idx = int(request.json.get('idx', 0))
+    idx = max(0, min(idx, len(state['color_ranges']) - 1))
+    state['active_range_idx'] = idx
+    cr = state['color_ranges'][idx]
+    return jsonify({'status': 'ok', 'active_idx': idx, **cr})
 
 
 if __name__ == '__main__':
