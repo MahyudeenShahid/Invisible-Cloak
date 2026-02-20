@@ -31,13 +31,14 @@
 
         <!-- Mode Toggle -->
         <div class="mode-toggle">
-          <button class="mode-btn active" id="mode-invisible" data-mode="invisible">&#x1F576;&#xFE0F; Invisible</button>
-          <button class="mode-btn" id="mode-virtual" data-mode="virtual">&#x1F304; Teleport</button>
+          <button class="mode-btn active" id="mode-invisible" data-mode="invisible">🕶️ Invisible</button>
+          <button class="mode-btn" id="mode-virtual" data-mode="virtual">🌄 Teleport</button>
+          <button class="mode-btn" id="mode-smart" data-mode="smart">🤖 Smart BG</button>
         </div>
 
         <!-- Invisible Mode: capture background -->
         <div id="panel-invisible">
-          <button class="btn btn-secondary" id="btn-capture">&#128247; Capture Background</button>
+          <button class="btn btn-secondary" id="btn-capture">📷 Capture Background</button>
         </div>
 
         <!-- Virtual Background Mode -->
@@ -51,10 +52,66 @@
             {% endfor %}
           </div>
           <label class="upload-label">
-            &#128247; Upload your own
+            📷 Upload your own
             <input type="file" id="upload-bg" accept="image/*" style="display:none"/>
           </label>
           <div id="selected-bg-name" class="selected-bg"></div>
+        </div>
+
+        <!-- Smart BG Mode (AI / no cloak needed) -->
+        <div id="panel-smart" style="display:none">
+          <div class="smart-info">
+            <span id="mp-badge" class="mp-badge">⚡ AI Powered · No cloak needed</span>
+          </div>
+
+          <!-- Background type selector -->
+          <div class="smart-type-toggle">
+            <button class="smart-type-btn active" data-stype="blur">🌫️ Blur</button>
+            <button class="smart-type-btn" data-stype="virtual">🖼️ Scene</button>
+            <button class="smart-type-btn" data-stype="solid">🎨 Color</button>
+          </div>
+
+          <!-- Blur sub-panel -->
+          <div id="smart-panel-blur" class="smart-subpanel">
+            <div class="slider-row">
+              <label>Blur amount: <span id="lbl-blur">25</span></label>
+              <input type="range" id="blur-amount" min="3" max="99" value="25" step="2"/>
+            </div>
+          </div>
+
+          <!-- Scene sub-panel -->
+          <div id="smart-panel-virtual" class="smart-subpanel" style="display:none">
+            <div class="bg-grid">
+              {% for scene in scenes %}
+              <button class="bg-tile smart-scene-tile" data-scene="{{ scene.id }}"
+                style="background-image:url('/static/backgrounds/{{ scene.id }}.jpg')">
+                <span>{{ scene.label }}</span>
+              </button>
+              {% endfor %}
+            </div>
+            <label class="upload-label">
+              📷 Upload your own
+              <input type="file" id="upload-bg-smart" accept="image/*" style="display:none"/>
+            </label>
+            <div id="selected-bg-name-smart" class="selected-bg"></div>
+          </div>
+
+          <!-- Solid color sub-panel -->
+          <div id="smart-panel-solid" class="smart-subpanel" style="display:none">
+            <div class="color-presets">
+              <button class="color-preset" data-r="0"   data-g="0"   data-b="0"   style="background:#000" title="Black"></button>
+              <button class="color-preset" data-r="255" data-g="255" data-b="255" style="background:#fff;border:1.5px solid #ccc" title="White"></button>
+              <button class="color-preset" data-r="0"   data-g="177" data-b="64"  style="background:#00b140" title="Green Screen"></button>
+              <button class="color-preset" data-r="0"   data-g="71"  data-b="171" style="background:#0047ab" title="Cobalt Blue"></button>
+              <button class="color-preset" data-r="128" data-g="0"   data-b="128" style="background:#800080" title="Purple"></button>
+              <button class="color-preset" data-r="220" data-g="240" data-b="255" style="background:#dcf0ff" title="Soft Sky"></button>
+            </div>
+            <div class="custom-color-row">
+              <label>Custom:</label>
+              <input type="color" id="solid-color-picker" value="#00b140"/>
+              <span id="solid-color-name" class="selected-bg">Green Screen</span>
+            </div>
+          </div>
         </div>
 
         <button class="btn btn-primary" id="btn-toggle">&#9654; Start</button>

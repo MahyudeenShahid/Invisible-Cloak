@@ -9,6 +9,38 @@ import webbrowser
 from flask import Flask, Response, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 
+# MediaPipe for AI person segmentation (video-call style background removal)
+# Uses the new Tasks API (mediapipe >= 0.10 — mp.solutions was removed)
+try:
+    import urllib.request as _urllib_req
+    import mediapipe as mp
+    from mediapipe.tasks import python as _mp_python
+    from mediapipe.tasks.python import vision as _mp_vision
+
+    _MODEL_URL  = ('https://storage.googleapis.com/mediapipe-models/'
+                   'image_segmenter/selfie_segmenter/float16/latest/'
+                   'selfie_segmenter.tflite')
+    _MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'selfie_segmenter.tflite')
+
+    if not os.path.exists(_MODEL_PATH):
+        print('[INFO] Downloading MediaPipe selfie segmentation model...')
+        _urllib_req.urlretrieve(_MODEL_URL, _MODEL_PATH)
+        print(f'[INFO] Model saved → {_MODEL_PATH}')
+
+    _seg_opts  = _mp_vision.ImageSegmenterOptions(
+        base_options=_mp_python.BaseOptions(model_asset_path=_MODEL_PATH),
+        running_mode=_mp_vision.RunningMode.IMAGE,
+        output_confidence_masks=True,
+    )
+    _segmentor = _mp_vision.ImageSegmenter.create_from_options(_seg_opts)
+    MEDIAPIPE_AVAILABLE = True
+    print('[INFO] MediaPipe selfie segmentation ready.')
+except Exception as _mp_err:
+    print(f'[WARN] MediaPipe unavailable: {_mp_err}')
+    MEDIAPIPE_AVAILABLE = False
+    _segmentor = None
+
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB upload limit
 
@@ -22,9 +54,15 @@ state = {
     'frame': None,
     'raw_frame': None,        # latest unprocessed camera frame
     'lock': threading.Lock(),
-    'bg_mode': 'invisible',   # 'invisible' | 'virtual'
-    'virtual_bg': None,       # numpy BGR image
+    # bg_mode: 'invisible' | 'virtual' | 'smart'
+    # 'smart' = AI person segmentation (like Zoom/Teams — no cloak needed)
+    'bg_mode': 'invisible',
+    'virtual_bg': None,       # numpy BGR image used for virtual/smart mode
     'virtual_bg_name': None,  # display name
+    # Smart-mode background type: 'blur' | 'virtual' | 'solid'
+    'smart_bg_type': 'blur',
+    'solid_color': [0, 177, 64],   # BGR green default
+    'smart_blur_amount': 25,       # Gaussian blur kernel size (must be odd)
 }
 
 EFFECTS = ['none', 'pixelate', 'blur', 'cartoon']
@@ -184,31 +222,67 @@ def camera_thread_fn():
         raw = cv2.flip(raw, 1)
         h_frame, w_frame = raw.shape[:2]
 
-        # Apply invisibility / teleport effect
-        if state['running']:
-            if state['bg_mode'] == 'virtual' and state['virtual_bg'] is not None:
-                bg_src = cv2.resize(state['virtual_bg'], (w_frame, h_frame))
-            elif state['bg_mode'] == 'invisible' and state['background'] is not None:
-                bg_src = state['background']
-            else:
-                bg_src = None
+        processed = raw
 
-            if bg_src is not None:
-                hsv = cv2.cvtColor(raw, cv2.COLOR_BGR2HSV)
-                mask = cv2.inRange(hsv, np.array(state['hsv_min']), np.array(state['hsv_max']))
-                mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=2)
-                mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, np.ones((5, 5), np.uint8), iterations=1)
-                mask = cv2.GaussianBlur(mask, (7, 7), 0)  # smooth edges
-                mask3 = cv2.merge([mask, mask, mask]).astype(np.float32) / 255.0
-                raw_f   = raw.astype(np.float32)
-                bg_f    = bg_src.astype(np.float32)
-                blended = raw_f * (1 - mask3) + bg_f * mask3
-                processed = np.clip(blended, 0, 255).astype(np.uint8)
-                processed = apply_effect(processed, state['effect'])
-            else:
-                processed = raw
-        else:
-            processed = raw
+        if state['running']:
+            mode = state['bg_mode']
+
+            # ── CLOAK mode (HSV masking) ─────────────────────────────────────
+            if mode in ('invisible', 'virtual'):
+                if mode == 'virtual' and state['virtual_bg'] is not None:
+                    bg_src = cv2.resize(state['virtual_bg'], (w_frame, h_frame))
+                elif mode == 'invisible' and state['background'] is not None:
+                    bg_src = state['background']
+                else:
+                    bg_src = None
+
+                if bg_src is not None:
+                    hsv = cv2.cvtColor(raw, cv2.COLOR_BGR2HSV)
+                    mask = cv2.inRange(hsv, np.array(state['hsv_min']), np.array(state['hsv_max']))
+                    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=2)
+                    mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, np.ones((5, 5), np.uint8), iterations=1)
+                    mask = cv2.GaussianBlur(mask, (7, 7), 0)
+                    mask3 = cv2.merge([mask, mask, mask]).astype(np.float32) / 255.0
+                    raw_f   = raw.astype(np.float32)
+                    bg_f    = bg_src.astype(np.float32)
+                    blended = raw_f * (1 - mask3) + bg_f * mask3
+                    processed = np.clip(blended, 0, 255).astype(np.uint8)
+                    processed = apply_effect(processed, state['effect'])
+
+            # ── SMART mode (MediaPipe AI segmentation — no cloak needed) ─────
+            elif mode == 'smart' and MEDIAPIPE_AVAILABLE and _segmentor is not None:
+                rgb = cv2.cvtColor(raw, cv2.COLOR_BGR2RGB)
+                mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                result = _segmentor.segment(mp_img)
+                if result.confidence_masks:
+                    # confidence_masks[0]: float32 h×w, 1=person, 0=background
+                    person_mask = result.confidence_masks[0].numpy_view().copy()
+                    # Smooth the edges for a natural look
+                    person_mask = cv2.GaussianBlur(person_mask, (15, 15), 0)
+                    person_mask3 = np.stack([person_mask]*3, axis=2)  # h×w×3
+
+                    bg_type = state['smart_bg_type']
+
+                    if bg_type == 'blur':
+                        k = state['smart_blur_amount']
+                        k = k if k % 2 == 1 else k + 1  # must be odd
+                        bg_layer = cv2.GaussianBlur(raw, (k, k), 0)
+
+                    elif bg_type == 'virtual' and state['virtual_bg'] is not None:
+                        bg_layer = cv2.resize(state['virtual_bg'], (w_frame, h_frame))
+
+                    elif bg_type == 'solid':
+                        bg_layer = np.full_like(raw, state['solid_color'], dtype=np.uint8)
+
+                    else:
+                        # Fallback to blur if nothing set
+                        bg_layer = cv2.GaussianBlur(raw, (25, 25), 0)
+
+                    raw_f    = raw.astype(np.float32)
+                    bg_f     = bg_layer.astype(np.float32)
+                    blended  = raw_f * person_mask3 + bg_f * (1 - person_mask3)
+                    processed = np.clip(blended, 0, 255).astype(np.uint8)
+                    processed = apply_effect(processed, state['effect'])
 
         with state['lock']:
             state['raw_frame'] = raw.copy()
@@ -217,23 +291,6 @@ def camera_thread_fn():
 
 camera_thread = threading.Thread(target=camera_thread_fn, daemon=True)
 camera_thread.start()
-
-
-def apply_effect(img, effect):
-    if effect == 'pixelate':
-        h, w = img.shape[:2]
-        temp = cv2.resize(img, (max(1, w // 16), max(1, h // 16)), interpolation=cv2.INTER_LINEAR)
-        return cv2.resize(temp, (w, h), interpolation=cv2.INTER_NEAREST)
-    elif effect == 'blur':
-        return cv2.GaussianBlur(img, (21, 21), 0)
-    elif effect == 'cartoon':
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = cv2.medianBlur(gray, 7)
-        edges = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 9, 9)
-        color = cv2.bilateralFilter(img, 9, 250, 250)
-        return cv2.bitwise_and(color, color, mask=edges)
-    return img
 
 
 def generate_frames():
@@ -278,6 +335,10 @@ def toggle():
         return jsonify({'status': 'error', 'message': 'Capture background first!'})
     if state['bg_mode'] == 'virtual' and state['virtual_bg'] is None:
         return jsonify({'status': 'error', 'message': 'Select a virtual background first!'})
+    if state['bg_mode'] == 'smart' and not MEDIAPIPE_AVAILABLE:
+        return jsonify({'status': 'error', 'message': 'MediaPipe not available. Run: pip install mediapipe'})
+    if state['bg_mode'] == 'smart' and state['smart_bg_type'] == 'virtual' and state['virtual_bg'] is None:
+        return jsonify({'status': 'error', 'message': 'Select a virtual background first!'})
     state['running'] = not state['running']
     return jsonify({'status': 'ok', 'running': state['running']})
 
@@ -285,11 +346,51 @@ def toggle():
 @app.route('/set_bg_mode', methods=['POST'])
 def set_bg_mode():
     mode = request.json.get('mode', 'invisible')
-    if mode in ('invisible', 'virtual'):
+    if mode in ('invisible', 'virtual', 'smart'):
         state['bg_mode'] = mode
         if state['running']:
             state['running'] = False
-    return jsonify({'status': 'ok', 'mode': state['bg_mode']})
+    return jsonify({
+        'status': 'ok',
+        'mode': state['bg_mode'],
+        'mediapipe_available': MEDIAPIPE_AVAILABLE,
+    })
+
+
+@app.route('/set_smart_bg_type', methods=['POST'])
+def set_smart_bg_type():
+    """Set smart-mode background type: blur | virtual | solid"""
+    bg_type = request.json.get('type', 'blur')
+    if bg_type in ('blur', 'virtual', 'solid'):
+        state['smart_bg_type'] = bg_type
+    blur_amount = request.json.get('blur_amount')
+    if blur_amount is not None:
+        k = max(3, int(blur_amount))
+        state['smart_blur_amount'] = k if k % 2 == 1 else k + 1
+    return jsonify({'status': 'ok', 'smart_bg_type': state['smart_bg_type']})
+
+
+@app.route('/set_solid_color', methods=['POST'])
+def set_solid_color():
+    """Set solid background color (r, g, b) for smart mode"""
+    data = request.json
+    r = int(data.get('r', 0))
+    g = int(data.get('g', 177))
+    b = int(data.get('b', 64))
+    state['solid_color'] = [b, g, r]   # store as BGR
+    return jsonify({'status': 'ok', 'r': r, 'g': g, 'b': b})
+
+
+@app.route('/smart_status', methods=['GET'])
+def smart_status():
+    return jsonify({
+        'mediapipe_available': MEDIAPIPE_AVAILABLE,
+        'smart_bg_type': state['smart_bg_type'],
+        'smart_blur_amount': state['smart_blur_amount'],
+        # Return solid color as RGB for display
+        'solid_color_rgb': [state['solid_color'][2], state['solid_color'][1], state['solid_color'][0]],
+        'virtual_bg_name': state['virtual_bg_name'],
+    })
 
 
 @app.route('/set_builtin_bg', methods=['POST'])

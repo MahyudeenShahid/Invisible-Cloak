@@ -390,3 +390,102 @@ input[type="text"]:focus { border-color: var(--primary); }
   min-height: 16px;
   text-align: center;
 }
+
+/* ── SMART BG MODE ──────────────────────────────────────────────────────── */
+
+.smart-info {
+  text-align: center;
+  margin-bottom: 4px;
+}
+.mp-badge {
+  display: inline-block;
+  background: linear-gradient(90deg, #6366f1, #4f6ef7);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 4px 12px;
+  border-radius: 99px;
+}
+
+/* Smart type toggle (Blur / Scene / Color) */
+.smart-type-toggle {
+  display: flex;
+  gap: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.smart-type-btn {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  background: var(--bg);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.smart-type-btn.active {
+  background: var(--primary);
+  color: #fff;
+}
+.smart-type-btn:not(.active):hover {
+  background: #e0e5ff;
+  color: var(--primary);
+}
+
+.smart-subpanel {
+  animation: fadeIn 0.18s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Color presets grid */
+.color-presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.color-preset {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 2.5px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.color-preset:hover { transform: scale(1.12); }
+.color-preset.active { border-color: var(--primary); }
+
+/* Custom color picker row */
+.custom-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.custom-color-row label {
+  white-space: nowrap;
+}
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  padding: 2px;
+  cursor: pointer;
+  background: none;
+}
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 6px; }
+input[type="color"]::-webkit-color-swatch { border: none; border-radius: 6px; }

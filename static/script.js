@@ -72,6 +72,7 @@
       currentMode = btn.dataset.mode;
       $('panel-invisible').style.display = currentMode === 'invisible' ? '' : 'none';
       $('panel-virtual').style.display   = currentMode === 'virtual'   ? '' : 'none';
+      $('panel-smart').style.display     = currentMode === 'smart'     ? '' : 'none';
       // stop if running
       if (running) {
         running = false;
@@ -112,6 +113,87 @@
     } else {
       showMsg(d.message, true);
     }
+  });
+
+  // ─── Smart BG Mode ───────────────────────────────────────────────
+  let currentSmartType = 'blur';
+
+  // Smart type toggle (Blur / Scene / Color)
+  document.querySelectorAll('.smart-type-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.smart-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentSmartType = btn.dataset.stype;
+      $('smart-panel-blur').style.display    = currentSmartType === 'blur'    ? '' : 'none';
+      $('smart-panel-virtual').style.display = currentSmartType === 'virtual' ? '' : 'none';
+      $('smart-panel-solid').style.display   = currentSmartType === 'solid'   ? '' : 'none';
+      await post('/set_smart_bg_type', { type: currentSmartType });
+    });
+  });
+
+  // Blur amount slider
+  $('blur-amount').addEventListener('input', () => {
+    const v = $('blur-amount').value;
+    $('lbl-blur').textContent = v;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      post('/set_smart_bg_type', { type: currentSmartType, blur_amount: +v });
+    }, 150);
+  });
+
+  // Smart scene tiles (inside smart panel)
+  document.querySelectorAll('.smart-scene-tile').forEach(tile => {
+    tile.addEventListener('click', async () => {
+      document.querySelectorAll('.smart-scene-tile').forEach(t => t.classList.remove('active'));
+      tile.classList.add('active');
+      const d = await post('/set_builtin_bg', { name: tile.dataset.scene });
+      if (d.status === 'ok') {
+        $('selected-bg-name-smart').textContent = '✓ ' + d.name;
+        showMsg('Smart background set: ' + d.name);
+      }
+    });
+  });
+
+  // Smart upload
+  $('upload-bg-smart').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/upload_bg', { method: 'POST', body: form });
+    const d = await res.json();
+    if (d.status === 'ok') {
+      document.querySelectorAll('.smart-scene-tile').forEach(t => t.classList.remove('active'));
+      $('selected-bg-name-smart').textContent = '✓ ' + d.name;
+      showMsg('Custom background uploaded!');
+    } else {
+      showMsg(d.message, true);
+    }
+  });
+
+  // Solid color presets
+  document.querySelectorAll('.color-preset').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.color-preset').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const r = +btn.dataset.r, g = +btn.dataset.g, b = +btn.dataset.b;
+      const hex = '#' + [r,g,b].map(x => x.toString(16).padStart(2,'0')).join('');
+      $('solid-color-picker').value = hex;
+      $('solid-color-name').textContent = btn.title;
+      await post('/set_solid_color', { r, g, b });
+    });
+  });
+
+  // Custom color picker
+  $('solid-color-picker').addEventListener('input', async () => {
+    const hex = $('solid-color-picker').value;
+    const r = parseInt(hex.slice(1,3), 16);
+    const g = parseInt(hex.slice(3,5), 16);
+    const b = parseInt(hex.slice(5,7), 16);
+    document.querySelectorAll('.color-preset').forEach(p => p.classList.remove('active'));
+    $('solid-color-name').textContent = hex;
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => post('/set_solid_color', { r, g, b }), 150);
   });
 
   // ─── Toggle Invisibility ─────────────────────────────────────────
