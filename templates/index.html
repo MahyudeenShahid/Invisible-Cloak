@@ -3,46 +3,71 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Invisible Cloak</title>
+  <title>Invisible Cloak | AI Magic</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <header>
-    <div class="logo">&#x1F9E5; Invisible Cloak</div>
-    <span id="status-badge" class="badge badge-off">OFF</span>
+    <div class="logo">
+      <span class="logo-icon">✨</span>
+      <span class="logo-text">Invisible Cloak</span>
+    </div>
+    <div class="header-right">
+      <span id="status-badge" class="badge badge-off">System Standby</span>
+    </div>
   </header>
 
   <main>
     <!-- LEFT: Video Feed -->
     <section class="video-section">
-      <div class="video-wrapper">
-        <img id="video-feed" src="/video_feed" alt="Camera Feed" title="Click to pick cloak color"/>
-        <div id="pick-tooltip">Click to pick color</div>
+      <div class="video-container">
+        <div class="video-wrapper" id="video-wrapper">
+          <img id="video-feed" src="/video_feed" alt="Camera Feed" title="Click to pick cloak color"/>
+          <div id="pick-tooltip">🎯 Aim & Click to Select Color</div>
+          <button id="btn-fullscreen" class="fs-btn" title="Toggle Fullscreen">
+            <svg id="fs-icon-enter" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+              <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+            <svg id="fs-icon-exit" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+              <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+              <line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>
+            </svg>
+          </button>
+        </div>
       </div>
-      <div class="video-hint">&#128073; Click anywhere on the video to auto-detect your cloak color</div>
+      <div class="video-hint">
+        <span class="hint-icon">💡</span>
+        <span class="hint-text">Pro-tip: Click anywhere on the video to automatically lock onto your cloak's color.</span>
+      </div>
     </section>
 
     <!-- RIGHT: Controls -->
     <aside class="controls">
 
-      <!-- Actions -->
+      <!-- Configuration Card -->
       <div class="card">
-        <h2>&#x1F3AC; Actions</h2>
+        <h2>🛠️ Control Center</h2>
 
         <!-- Mode Toggle -->
         <div class="mode-toggle">
-          <button class="mode-btn active" id="mode-invisible" data-mode="invisible">🕶️ Invisible</button>
-          <button class="mode-btn" id="mode-virtual" data-mode="virtual">🌄 Teleport</button>
-          <button class="mode-btn" id="mode-smart" data-mode="smart">🤖 Smart BG</button>
+          <button class="mode-btn active" id="mode-invisible" data-mode="invisible" title="Use a physical cloak">Cloak</button>
+          <button class="mode-btn" id="mode-virtual" data-mode="virtual" title="Chroma key background">Virtual</button>
+          <button class="mode-btn" id="mode-smart" data-mode="smart" title="AI Segmentation">Smart AI</button>
         </div>
 
         <!-- Invisible Mode: capture background -->
-        <div id="panel-invisible">
-          <button class="btn btn-secondary" id="btn-capture">📷 Capture Background</button>
+        <div id="panel-invisible" class="mode-panel">
+          <button class="btn btn-secondary" id="btn-capture">
+            <span>📷</span> Capture Base Scene
+          </button>
         </div>
 
         <!-- Virtual Background Mode -->
-        <div id="panel-virtual" style="display:none">
+        <div id="panel-virtual" class="mode-panel" style="display:none">
           <div class="bg-grid">
             {% for scene in scenes %}
             <button class="bg-tile" data-scene="{{ scene.id }}"
@@ -52,31 +77,47 @@
             {% endfor %}
           </div>
           <label class="upload-label">
-            📷 Upload your own
+            <span class="upload-icon">📤</span>
+            <span class="upload-text">Upload Custom Scene</span>
             <input type="file" id="upload-bg" accept="image/*" style="display:none"/>
           </label>
           <div id="selected-bg-name" class="selected-bg"></div>
         </div>
 
         <!-- Smart BG Mode (AI / no cloak needed) -->
-        <div id="panel-smart" style="display:none">
+        <div id="panel-smart" class="mode-panel" style="display:none">
           <div class="smart-info">
-            <span id="mp-badge" class="mp-badge">⚡ AI Powered · No cloak needed</span>
+            <span id="mp-badge" class="mp-badge">⚡ AI Segmentation Engine</span>
           </div>
 
           <!-- Background type selector -->
           <div class="smart-type-toggle">
-            <button class="smart-type-btn active" data-stype="blur">🌫️ Blur</button>
-            <button class="smart-type-btn" data-stype="virtual">🖼️ Scene</button>
-            <button class="smart-type-btn" data-stype="solid">🎨 Color</button>
+            <button class="smart-type-btn active" data-stype="blur">
+              <span class="stype-icon">🌫️</span>
+              <span class="stype-text">Blur</span>
+            </button>
+            <button class="smart-type-btn" data-stype="virtual">
+              <span class="stype-icon">🖼️</span>
+              <span class="stype-text">Scene</span>
+            </button>
+            <button class="smart-type-btn" data-stype="solid">
+              <span class="stype-icon">🎨</span>
+              <span class="stype-text">Solid</span>
+            </button>
           </div>
 
           <!-- Blur sub-panel -->
           <div id="smart-panel-blur" class="smart-subpanel">
-            <div class="slider-row">
-              <label>Blur amount: <span id="lbl-blur">25</span></label>
-              <input type="range" id="blur-amount" min="3" max="99" value="25" step="2"/>
+            <div class="slider-group">
+              <div class="slider-row">
+                <label>
+                  <span>Bokeh Intensity</span>
+                  <span id="lbl-blur">25</span>
+                </label>
+                <input type="range" id="blur-amount" min="3" max="99" value="25" step="2"/>
+              </div>
             </div>
+            <div class="subpanel-hint">AI precisely isolates you from the messy environment.</div>
           </div>
 
           <!-- Scene sub-panel -->
@@ -89,38 +130,44 @@
               </button>
               {% endfor %}
             </div>
-            <label class="upload-label">
-              📷 Upload your own
+            <label class="upload-label compact">
+              <span class="upload-icon">📁</span>
+              <span class="upload-text">Import Scene</span>
               <input type="file" id="upload-bg-smart" accept="image/*" style="display:none"/>
             </label>
-            <div id="selected-bg-name-smart" class="selected-bg"></div>
+            <div id="selected-bg-name-smart" class="selected-bg-status"></div>
           </div>
 
           <!-- Solid color sub-panel -->
           <div id="smart-panel-solid" class="smart-subpanel" style="display:none">
-            <div class="color-presets">
-              <button class="color-preset" data-r="0"   data-g="0"   data-b="0"   style="background:#000" title="Black"></button>
-              <button class="color-preset" data-r="255" data-g="255" data-b="255" style="background:#fff;border:1.5px solid #ccc" title="White"></button>
-              <button class="color-preset" data-r="0"   data-g="177" data-b="64"  style="background:#00b140" title="Green Screen"></button>
-              <button class="color-preset" data-r="0"   data-g="71"  data-b="171" style="background:#0047ab" title="Cobalt Blue"></button>
-              <button class="color-preset" data-r="128" data-g="0"   data-b="128" style="background:#800080" title="Purple"></button>
-              <button class="color-preset" data-r="220" data-g="240" data-b="255" style="background:#dcf0ff" title="Soft Sky"></button>
-            </div>
-            <div class="custom-color-row">
-              <label>Custom:</label>
-              <input type="color" id="solid-color-picker" value="#00b140"/>
-              <span id="solid-color-name" class="selected-bg">Green Screen</span>
+            <div class="color-presets-wrapper">
+              <div class="color-presets">
+                <button class="color-preset active" data-r="0"   data-g="177" data-b="64"  style="background:#00b140" title="Chroma Key Green"></button>
+                <button class="color-preset" data-r="0"   data-g="71"  data-b="171" style="background:#0047ab" title="Matte Blue"></button>
+                <button class="color-preset" data-r="0"   data-g="0"   data-b="0"   style="background:#000" title="True Black"></button>
+                <button class="color-preset" data-r="255" data-g="255" data-b="255" style="background:#fff;border:1px solid rgba(0,0,0,0.1)" title="Studio White"></button>
+                <button class="color-preset" data-r="128" data-g="0"   data-b="128" style="background:#800080" title="Cyber Violet"></button>
+              </div>
+              <div class="custom-color-control">
+                <div class="color-picker-orb">
+                  <input type="color" id="solid-color-picker" value="#00b140"/>
+                  <span class="picker-hint">Pick Custom</span>
+                </div>
+                <span id="solid-color-name" class="color-label">Chroma Key Green</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <button class="btn btn-primary" id="btn-toggle">&#9654; Start</button>
+        <button class="btn btn-primary" id="btn-toggle">
+          <span id="toggle-icon">▶</span> <span id="toggle-text">Initialize System</span>
+        </button>
         <div id="action-msg" class="msg"></div>
       </div>
 
-      <!-- Effect -->
+      <!-- Effects Card -->
       <div class="card">
-        <h2>&#x2728; Effect</h2>
+        <h2>✨ Visual Filters</h2>
         <div class="effect-grid">
           {% for effect in effects %}
           <button class="effect-btn {% if loop.first %}active{% endif %}" data-effect="{{ effect }}">{{ effect }}</button>
@@ -128,32 +175,32 @@
         </div>
       </div>
 
-      <!-- HSV Sliders -->
+      <!-- Color Tuning Card -->
       <div class="card">
-        <h2>&#x1F3A8; Color Range (HSV)</h2>
-        <div class="sensitivity-row">
-          <label>Sensitivity: <span id="sens-val">20</span></label>
-          <input type="range" id="sensitivity" min="1" max="60" value="20"/>
-        </div>
+        <h2>🎨 Color Precision (HSV)</h2>
         <div class="slider-group">
-          {% for s in [('H Min','h_min',0,179,0),('H Max','h_max',0,179,179),('S Min','s_min',0,255,0),('S Max','s_max',0,255,255),('V Min','v_min',0,255,0),('V Max','v_max',0,255,255)] %}
           <div class="slider-row">
-            <label>{{ s[0] }}: <span id="lbl-{{ s[1] }}">{{ s[4] }}</span></label>
+            <label>Detection Sensitivity <span id="sens-val">20</span></label>
+            <input type="range" id="sensitivity" min="1" max="60" value="20"/>
+          </div>
+          {% for s in [('Hue Min','h_min',0,179,0),('Hue Max','h_max',0,179,179),('Sat Min','s_min',0,255,0),('Sat Max','s_max',0,255,255),('Val Min','v_min',0,255,0),('Val Max','v_max',0,255,255)] %}
+          <div class="slider-row">
+            <label>{{ s[0] }} <span id="lbl-{{ s[1] }}">{{ s[4] }}</span></label>
             <input type="range" id="{{ s[1] }}" min="{{ s[2] }}" max="{{ s[3] }}" value="{{ s[4] }}"/>
           </div>
           {% endfor %}
         </div>
       </div>
 
-      <!-- Profiles -->
+      <!-- Profiles Card -->
       <div class="card">
-        <h2>&#x1F4BE; Color Profiles</h2>
+        <h2>💾 Memory Slots</h2>
         <div class="profile-input-row">
-          <input type="text" id="profile-name" placeholder="Profile name..." maxlength="30"/>
-          <button class="btn btn-small btn-secondary" id="btn-save-profile">Save</button>
+          <input type="text" id="profile-name" placeholder="Name your preset..." maxlength="30"/>
+          <button class="btn btn-small btn-primary" id="btn-save-profile">Save</button>
         </div>
         <div id="profiles-list" class="profiles-list">
-          <span class="no-profiles">No saved profiles yet.</span>
+          <span class="no-profiles">No presets saved.</span>
         </div>
       </div>
 
@@ -163,3 +210,4 @@
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+

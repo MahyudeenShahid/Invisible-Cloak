@@ -10,7 +10,7 @@
     el.textContent = text;
     el.className = 'msg' + (isError ? ' error' : '');
     clearTimeout(el._t);
-    el._t = setTimeout(() => { el.textContent = ''; }, 3000);
+    el._t = setTimeout(() => { el.innerHTML = ''; }, 3000);
   }
 
   async function post(url, data) {
@@ -26,6 +26,7 @@
   sliderIds.forEach(id => {
     const slider = $(id);
     const lbl = $('lbl-' + id);
+    if (!slider || !lbl) return;
     slider.addEventListener('input', () => {
       lbl.textContent = slider.value;
       clearTimeout(debounceTimer);
@@ -44,8 +45,8 @@
   function applySliders(data) {
     ['h_min','h_max','s_min','s_max','v_min','v_max'].forEach(k => {
       if (data[k] !== undefined) {
-        $(k).value = data[k];
-        $('lbl-' + k).textContent = data[k];
+        if ($(k)) $(k).value = data[k];
+        if ($('lbl-' + k)) $('lbl-' + k).textContent = data[k];
       }
     });
   }
@@ -57,10 +58,11 @@
 
   // ─── Capture Background ─────────────────────────────────────────
   $('btn-capture').addEventListener('click', async () => {
-    $('btn-capture').textContent = '⏳ Capturing...';
+    const originalHtml = $('btn-capture').innerHTML;
+    $('btn-capture').innerHTML = '<span>⏳</span> Analyzing Scene...';
     const d = await post('/capture_background', {});
-    $('btn-capture').textContent = '📷 Capture Background';
-    showMsg(d.message || 'Done!', d.status !== 'ok');
+    $('btn-capture').innerHTML = originalHtml;
+    showMsg(d.message || 'Scene Base Captured!', d.status !== 'ok');
   });
 
   // ─── Mode Toggle ────────────────────────────────────────────────
@@ -76,10 +78,12 @@
       // stop if running
       if (running) {
         running = false;
-        $('btn-toggle').textContent = '▶ Start';
+        $('toggle-icon').textContent = '▶';
+        $('toggle-text').textContent = 'Initialize System';
         $('btn-toggle').className = 'btn btn-primary';
         const badge = $('status-badge');
-        badge.textContent = 'OFF'; badge.className = 'badge badge-off';
+        badge.textContent = 'System Standby'; 
+        badge.className = 'badge badge-off';
       }
       await post('/set_bg_mode', { mode: currentMode });
     });
@@ -92,8 +96,9 @@
       tile.classList.add('active');
       const d = await post('/set_builtin_bg', { name: tile.dataset.scene });
       if (d.status === 'ok') {
-        $('selected-bg-name').textContent = '✓ ' + d.name;
-        showMsg('Background set: ' + d.name);
+        const target = tile.closest('.smart-subpanel') ? 'selected-bg-name-smart' : 'selected-bg-name';
+        $(target).textContent = 'Selected: ' + d.name;
+        showMsg('Target set: ' + d.name);
       }
     });
   });
@@ -196,16 +201,48 @@
     debounceTimer = setTimeout(() => post('/set_solid_color', { r, g, b }), 150);
   });
 
+  // ─── Fullscreen ──────────────────────────────────────────────────
+  const videoWrapper  = $('video-wrapper');
+  const fsIconEnter   = $('fs-icon-enter');
+  const fsIconExit    = $('fs-icon-exit');
+
+  $('btn-fullscreen').addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      (videoWrapper.requestFullscreen
+        || videoWrapper.webkitRequestFullscreen
+        || videoWrapper.mozRequestFullScreen
+        || videoWrapper.msRequestFullscreen
+      ).call(videoWrapper);
+    } else {
+      (document.exitFullscreen
+        || document.webkitExitFullscreen
+        || document.mozCancelFullScreen
+        || document.msExitFullscreen
+      ).call(document);
+    }
+  });
+
+  function onFsChange() {
+    const isFs = !!document.fullscreenElement;
+    fsIconEnter.style.display = isFs ? 'none' : '';
+    fsIconExit.style.display  = isFs ? ''     : 'none';
+  }
+  document.addEventListener('fullscreenchange',       onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+  document.addEventListener('mozfullscreenchange',    onFsChange);
+  document.addEventListener('MSFullscreenChange',     onFsChange);
+
   // ─── Toggle Invisibility ─────────────────────────────────────────
   let running = false;
   $('btn-toggle').addEventListener('click', async () => {
     const d = await post('/toggle', {});
     if (d.status === 'error') { showMsg(d.message, true); return; }
     running = d.running;
-    $('btn-toggle').textContent = running ? '⏹ Stop' : '▶ Start';
+    $('toggle-icon').textContent = running ? '⏹' : '▶';
+    $('toggle-text').textContent = running ? 'Terminate Feed' : 'Initialize System';
     $('btn-toggle').className = running ? 'btn btn-danger' : 'btn btn-primary';
     const badge = $('status-badge');
-    badge.textContent = running ? 'ON' : 'OFF';
+    badge.textContent = running ? 'Active Feed' : 'System Standby';
     badge.className = 'badge ' + (running ? 'badge-on' : 'badge-off');
   });
 
@@ -248,14 +285,16 @@
     const list = $('profiles-list');
     const names = Object.keys(profiles);
     if (names.length === 0) {
-      list.innerHTML = '<span class="no-profiles">No saved profiles yet.</span>';
+      list.innerHTML = '<span class="no-profiles">No presets saved.</span>';
       return;
     }
     list.innerHTML = names.map(name => `
       <div class="profile-item">
         <span title="${name}">${name}</span>
-        <button class="load-btn" data-name="${name}">Load</button>
-        <button class="del-btn"  data-name="${name}">✕</button>
+        <div class="profile-actions">
+          <button class="load-btn" data-name="${name}">Load</button>
+          <button class="del-btn"  data-name="${name}">✕</button>
+        </div>
       </div>
     `).join('');
 
