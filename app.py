@@ -212,6 +212,49 @@ def apply_effect(img, effect):
     return img
 
 
+def preprocess_frame(frame):
+    """
+    Advanced preprocessing for lighting and noise.
+    1. Denoise with Bilateral Filter (preserves edges better than Gaussian)
+    2. Normalize illumination using CLAHE in LAB color space
+    """
+    # 1. Denoising
+    denoised = cv2.bilateralFilter(frame, 9, 75, 75)
+    
+    # 2. Illumination Normalization
+    lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    
+    # Clip limit 2.0 with 8x8 grid to normalize shadows/highlights
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    cl = clahe.apply(l)
+    
+    # Re-merge and convert back to BGR
+    limg = cv2.merge((cl, a, b))
+    enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    return enhanced
+
+
+def refine_mask(mask):
+    """
+    Advanced morphological cleanup for the binary cloak mask.
+    Uses elliptical kernels for more organic shaping.
+    """
+    # Kernel for opening (noise removal)
+    kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    # Kernel for closing (hole filling)
+    kernel_large = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    
+    # Remove small speckles (false positives)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_small, iterations=1)
+    # Fill small holes inside the cloak (false negatives)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_large, iterations=2)
+    
+    # Soften the boundary for better alpha-blending
+    mask = cv2.GaussianBlur(mask, (7, 7), 0)
+    return mask
+
+
 # ── Dedicated camera reader thread ────────────────────────────────────────────
 # All cap.read() calls happen here — no other code touches the camera.
 def camera_thread_fn():
@@ -224,6 +267,9 @@ def camera_thread_fn():
         raw = cv2.flip(raw, 1)
         h_frame, w_frame = raw.shape[:2]
 
+        # ── Preprocessing (Denoise & Detail Enhancement) ────────────────────
+        # Apply the new detailed preprocessing logic
+        pp_raw = preprocess_frame(raw)
         processed = raw
 
         if state['running']:
@@ -239,14 +285,16 @@ def camera_thread_fn():
                     bg_src = None
 
                 if bg_src is not None:
-                    hsv = cv2.cvtColor(raw, cv2.COLOR_BGR2HSV)
+                    # Convert the PREPROCESSED frame to HSV instead of the raw noisy one
+                    hsv = cv2.cvtColor(pp_raw, cv2.COLOR_BGR2HSV)
                     mask = np.zeros(hsv.shape[:2], np.uint8)
                     for _cr in state['color_ranges']:
                         _m = cv2.inRange(hsv, np.array(_cr['hsv_min']), np.array(_cr['hsv_max']))
                         mask = cv2.bitwise_or(mask, _m)
-                    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=2)
-                    mask = cv2.morphologyEx(mask, cv2.MORPH_DILATE, np.ones((5, 5), np.uint8), iterations=1)
-                    mask = cv2.GaussianBlur(mask, (7, 7), 0)
+                    
+                    # Apply advanced mask-morphology refinement
+                    mask = refine_mask(mask)
+
                     mask3 = cv2.merge([mask, mask, mask]).astype(np.float32) / 255.0
                     raw_f   = raw.astype(np.float32)
                     bg_f    = bg_src.astype(np.float32)
