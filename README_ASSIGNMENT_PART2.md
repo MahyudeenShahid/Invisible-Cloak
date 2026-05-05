@@ -82,42 +82,53 @@ The goal of HIM is to make the invisibility effect stable, lighting-robust, and 
 ## Implementation Status (In This Project)
 
 ### Implemented in code
-The following parts of HIM are implemented in [app.py](app.py) and its refactored modules:
+The following parts of HIM are implemented in the refactored pipeline modules (not inside app.py directly):
 
-- **Stage 1:** Preprocessing with Bilateral Filter and CLAHE in LAB.
-- **Stage 3:** Morphological opening and closing using elliptical kernels.
-- **Stage 4:** Edge feathering with Gaussian blur and alpha blending.
-- **Stage 5:** Temporal smoothing using a short mask history window.
-- **Stage 6:** AI + HSV fusion to suppress background false positives.
-- **Integration:** HSV masking runs on the preprocessed frame and uses the refined mask.
+- **Stage 1:** Preprocessing with Bilateral Filter and CLAHE in LAB (see [core/processing.py](core/processing.py)).
+- **Stage 3:** Morphological opening and closing using elliptical kernels (see [core/processing.py](core/processing.py)).
+- **Stage 4:** Edge feathering with Gaussian blur and alpha blending (see [core/processing.py](core/processing.py)).
+- **Stage 5:** Temporal smoothing using a short mask history window (see [core/processing.py](core/processing.py)).
+- **Stage 6:** AI + HSV fusion to suppress background false positives (see [core/camera.py](core/camera.py)).
+- **Integration:** HSV masking runs on the preprocessed frame and uses the refined mask (see [core/camera.py](core/camera.py)).
 
 ---
 
 ## Implementation Snippet (From Project Code)
 
+From [core/processing.py](core/processing.py):
+
 ```python
 def preprocess_frame(frame):
-    # Denoise while keeping edges
-    denoised = cv2.bilateralFilter(frame, 9, 75, 75)
+   # Denoise while keeping edges
+   denoised = cv2.bilateralFilter(frame, 9, 75, 75)
 
-    # Normalize lighting
-    lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
-    l, a, b = cv2.split(lab)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    cl = clahe.apply(l)
-    limg = cv2.merge((cl, a, b))
-    enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
-    return enhanced
+   # Normalize lighting
+   lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
+   l, a, b = cv2.split(lab)
+   clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+   cl = clahe.apply(l)
+   limg = cv2.merge((cl, a, b))
+   enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+   return enhanced
 
 def refine_mask(mask):
-    # Elliptical kernels for organic shapes
-    kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    kernel_large = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+   # Elliptical kernels for organic shapes
+   kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+   kernel_large = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
 
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_small, iterations=1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_large, iterations=2)
-    mask = cv2.GaussianBlur(mask, (7, 7), 0)
-    return mask
+   mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_small, iterations=1)
+   mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_large, iterations=2)
+   mask = cv2.GaussianBlur(mask, (7, 7), 0)
+   return mask
+```
+
+From [core/camera.py](core/camera.py):
+
+```python
+mask_f = mask.astype(np.float32) / 255.0
+if state.get('use_ai_refine', False) and person_mask is not None:
+   mask_f = mask_f * person_mask
+mask_f = temporal_smooth_mask(mask_f, state.get('mask_history'), window)
 ```
 
 ---
