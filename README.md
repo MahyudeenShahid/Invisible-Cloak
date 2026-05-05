@@ -1,7 +1,6 @@
-
 # 🧥 Invisible Cloak
 
-> A real-time Harry Potter-style invisibility cloak effect powered by Python, OpenCV, and a modern web interface. Now with **Teleport Mode** — and **multi-color cloak support**: use up to 6 different cloak colors at once!
+> A real-time Harry Potter-style invisibility cloak effect powered by Python, OpenCV, and a modern web interface. Now with **Virtual Mode**, **Smart AI Segmentation**, and **multi-color cloak support** (up to 6 colors at once).
 
 ![InvisibleGif](https://github.com/abd-shoumik/Invisible-Cloak/blob/master/Invisible.gif)
 
@@ -11,6 +10,7 @@
 
 - [How It Works](#how-it-works)
 - [Modes](#modes)
+- [Pipeline Controls](#pipeline-controls)
 - [Project Structure](#project-structure)
 - [File Descriptions](#file-descriptions)
 - [Setup & Installation](#setup--installation)
@@ -20,28 +20,36 @@
 
 ---
 
-
 ## 💡 How It Works
 
-The invisibility effect works using **HSV (Hue, Saturation, Value) color masking**:
+The invisibility effect is built on a robust HSV + AI pipeline:
 
-1. A background frame is captured when the cloak is absent.
-2. Each new frame is analyzed in HSV color space to detect **one or more cloak colors** (multi-color support).
-3. Pixels matching any cloak color are replaced with the selected background.
-4. The result is a seamless effect — the person holding the cloak appears to vanish or teleport.
+1. Capture a background frame when the cloak is not visible.
+2. Preprocess each frame (denoise + CLAHE) for stable lighting.
+3. Convert to HSV and detect **one or more cloak colors**.
+4. Refine the mask with morphology and soft edge blending.
+5. Optionally apply **temporal smoothing** to reduce flicker.
+6. Optionally use **AI refine** (person mask) to suppress false positives.
+7. Blend the cloak pixels with the selected background.
 
 ---
-
 
 ## 🎭 Modes
 
 | Mode | Description |
 |---|---|
-| 🕶️ **Invisible** | Classic mode — cloak area shows the real captured background. Now supports **multiple cloak colors** at once! |
-| 🌄 **Teleport** | Cloak area is replaced with a virtual scene (beach, space, city, etc.) |
+| 🕶️ **Cloak** | Classic invisibility using a captured background. Supports **multi-color cloak**. |
+| 🌄 **Virtual** | Same cloak mask, but replaced with a virtual scene. |
+| 🤖 **Smart AI** | No cloak needed. Uses MediaPipe person segmentation with blur/virtual/solid backgrounds. |
 
-In **Teleport mode**, pick from 5 built-in scenes or upload your own photo as the background.
-In both modes, you can add up to 6 different cloak colors (e.g. red + blue + green) and all will be made invisible/teleported simultaneously.
+---
+
+## ⚙️ Pipeline Controls
+
+These controls appear in **Smart AI** mode and are disabled while the system is running:
+
+- **AI refine mask:** Uses the AI person mask to clean HSV results.
+- **Temporal smoothing window (1–12):** Higher values reduce flicker but add slight delay.
 
 ---
 
@@ -51,21 +59,29 @@ In both modes, you can add up to 6 different cloak colors (e.g. red + blue + gre
 Invisible-Cloak/
 │
 ├── app.py                      ← Flask web app (main entry point)
-├── cloak_gui.py                ← PyQt5 desktop GUI (alternative)
-├── invisible.py                ← Classic command-line invisibility script
-├── color_range_detector.py     ← Classic command-line HSV color picker
+├── core/                       ← Processing pipeline and utilities
+│   ├── camera.py               ← Camera thread + processing pipeline
+│   ├── processing.py           ← Preprocess, mask refine, smoothing, effects
+│   ├── mediapipe_utils.py      ← MediaPipe model init + segmentation
+│   ├── scenes.py               ← Built-in background generators
+│   └── state.py                ← Shared state + constants
 │
 ├── templates/
-│   └── index.html              ← Web UI HTML template
+│   └── index.html              ← Web UI layout
 │
 ├── static/
 │   ├── style.css               ← Web UI stylesheet
-│   ├── script.js               ← Web UI JavaScript logic
+│   ├── script.js               ← Web UI JavaScript
 │   ├── backgrounds/            ← Built-in scene images (auto-generated)
-│   └── uploads/                ← User-uploaded background images
+│   └── uploads/                ← User-uploaded scenes
 │
-├── requirements.txt            ← Python dependencies
+├── cloak_gui.py                ← PyQt5 desktop GUI (alternative)
+├── invisible.py                ← Classic command-line invisibility script
+├── color_range_detector.py     ← Classic HSV color picker
+│
+├── selfie_segmenter.tflite     ← MediaPipe model (auto-downloaded)
 ├── profiles.json               ← Saved color profiles (auto-generated)
+├── requirements.txt            ← Python dependencies
 └── range.pickle                ← Saved HSV range (auto-generated)
 ```
 
@@ -74,120 +90,65 @@ Invisible-Cloak/
 ## 📄 File Descriptions
 
 ### `app.py` — Flask Web Backend
-The main entry point for the **web application**. It:
-- Streams live webcam video to the browser via MJPEG (`/video_feed`).
-- Auto-generates 5 built-in scene backgrounds on startup (beach, space, forest, sunset, city).
-- Provides REST API endpoints for all actions:
-  - `POST /capture_background` — Captures the background frame (Invisible mode).
-  - `POST /toggle` — Starts or stops the effect.
-  - `POST /set_hsv` — Updates the HSV color range.
-  - `POST /set_effect` — Switches the visual effect (none/pixelate/blur/cartoon).
-  - `POST /pick_color` — Auto-detects HSV values from a pixel clicked on the video.
-  - `POST /set_bg_mode` — Switches between `invisible` and `virtual` modes.
-  - `POST /set_builtin_bg` — Selects a built-in scene as virtual background.
-  - `POST /upload_bg` — Uploads a custom image as virtual background.
-  - `GET  /bg_status` — Returns current mode and active background name.
-  - `GET  /profiles` — Returns all saved color profiles.
-  - `POST /save_profile` — Saves current HSV settings as a named profile.
-  - `POST /load_profile` — Loads a previously saved profile.
-  - `POST /delete_profile` — Deletes a saved profile.
-- Automatically opens the browser when started.
-- Uses a background thread to safely share the latest video frame.
+Main entry point for the **web app**. It:
+- Streams video to the browser via MJPEG (`/video_feed`).
+- Handles mode switching and background selection.
+- Exposes REST endpoints including:
+  - `POST /capture_background`
+  - `POST /toggle`
+  - `POST /set_bg_mode`
+  - `POST /set_smart_bg_type`
+  - `POST /set_solid_color`
+  - `POST /set_builtin_bg`
+  - `POST /upload_bg`
+  - `GET  /bg_status`
+  - `GET  /smart_status`
+  - `GET  /pipeline_status`
+  - `POST /set_pipeline`
+  - `POST /set_hsv`
+  - `POST /pick_color`
+  - `POST /set_effect`
+  - `GET  /profiles`
+  - `POST /save_profile`
+  - `POST /load_profile`
+  - `POST /delete_profile`
 
----
-
+### `core/` — Processing Pipeline
+- `camera.py`: Dedicated camera thread + mode handling (cloak, virtual, smart AI).
+- `processing.py`: Preprocessing, HSV mask, temporal smoothing, and effects.
+- `mediapipe_utils.py`: MediaPipe model download/init and segmentation helper.
+- `scenes.py`: Built-in background generators (beach, space, forest, sunset, city).
+- `state.py`: Shared state and constants.
 
 ### `templates/index.html` — Web UI Layout
-The HTML template served by Flask. It contains:
-- A **live video feed** panel (click anywhere to auto-pick a color).
-- A **mode toggle** (Invisible / Teleport).
-- A **scene grid** (5 built-in backgrounds + custom upload) shown in Teleport mode.
-- **Multi-color cloak chips**: add, select, and remove up to 6 cloak colors. Each chip shows a color swatch and can be edited or deleted.
-- **HSV sliders** to fine-tune the currently selected cloak color range.
-- A **sensitivity slider** to control color tolerance when clicking to pick.
-- An **effect selector** (none, pixelate, blur, cartoon).
-- Buttons to **capture background**, **start/stop** the effect.
-- A **profiles panel** to save, load, and delete named color settings (now saves all cloak colors).
-- A status badge (ON/OFF) in the header.
-
----
-
+Contains:
+- Live video feed and fullscreen toggle.
+- Mode selector (Cloak / Virtual / Smart AI).
+- Smart AI controls (blur/scene/solid).
+- Pipeline controls (AI refine toggle, temporal window slider).
+- Multi-color cloak chips and HSV sliders.
+- Effects, profiles, and status badge.
 
 ### `static/style.css` — Web UI Styles
-A clean, minimal CSS stylesheet that gives the web app a modern look:
-- Responsive two-column layout (video + controls panel).
-- Mode toggle button group with active state styling.
-- Scene grid tiles with background image previews.
-- Dashed upload button and selected background indicator.
-- **Multi-color chips**: glassmorphism color chips, swatches, and delete buttons.
-- Custom-styled sliders, buttons, cards, and profile list items.
-- Color-coded status indicators and smooth hover/transition effects.
+Modern glassmorphism theme with:
+- Card-based layout.
+- Custom sliders and toggles.
+- Smart AI tabs and color presets.
+- Responsive layout and animations.
 
----
-
-
-### `static/script.js` — Web UI JavaScript
-Handles all frontend interactivity without any frameworks:
-- Mode toggle switches between Invisible and Teleport panels.
-- Scene tile clicks send the selected background to the server.
-- Custom image upload via `FormData` and `/upload_bg`.
-- **Multi-color cloak logic**: add, select, and remove color chips; each chip controls its own HSV sliders and video click-to-pick.
-- Listens to slider changes and debounces HSV updates for the active color slot.
-- Handles button clicks for capture, toggle, effect, and profiles (now saves/loads all cloak colors).
-- Sends `(x, y)` click coordinates to auto-pick HSV values for the selected color slot.
-- Dynamically renders the saved profiles list with load/delete buttons.
-- Updates slider labels and the status badge in real time.
-
----
-
-### `cloak_gui.py` — PyQt5 Desktop GUI
-A standalone desktop application (alternative to the web app). Features:
-- Live camera preview inside the GUI window.
-- Click on the preview image to auto-pick the cloak color.
-- HSV sliders for manual fine-tuning.
-- Effect dropdown (none, pixelate, blur, cartoon).
-- Buttons to capture background, start/stop invisibility, and save HSV range to `range.pickle`.
-
----
-
-### `invisible.py` — Classic Invisibility Script
-The original command-line invisibility script. It:
-- Loads HSV bounds from `range.pickle` (saved by `color_range_detector.py`).
-- Captures the background over the first 60 frames.
-- Applies the cloak mask each frame and blends background pixels.
-- Supports effect switching with the `e` key and quit with `q`.
-- Designed for users who prefer running scripts directly without a GUI.
-
----
-
-### `color_range_detector.py` — Classic HSV Color Picker
-A PyQt5 GUI tool for calibrating the cloak color. It:
-- Opens a live webcam feed with an HSV preview overlay.
-- Shows six sliders (H/S/V min and max) to define the color range.
-- Renders a real-time preview of the mask on the video.
-- Saves the chosen HSV range to `range.pickle` when you click **Save Range**.
-- Used together with `invisible.py` in the classic workflow.
-
----
-
-
-### `requirements.txt` — Python Dependencies
-
-| Package | Purpose |
-|---|---|
-| `opencv-python` | Webcam capture, image processing, HSV masking (multi-color support) |
-| `opencv-contrib-python` | Extra OpenCV modules |
-| `numpy` | Array operations for frame manipulation |
-| `flask` | Web server and API for the web app |
-| `PyQt5` | Desktop GUI (cloak_gui.py & color_range_detector.py) |
-| `imutils` | Convenience functions for OpenCV |
-| `scipy` | Scientific computing utilities |
+### `static/script.js` — Web UI Logic
+Handles:
+- Mode switching and panel visibility.
+- Background selection and upload.
+- HSV slider sync and multi-color chips.
+- Smart AI settings and pipeline toggles.
+- Profiles load/save/delete.
 
 ---
 
 ## ⚙️ Setup & Installation
 
-**Requirements:** Python 3.9 or newer (Python 3.13+ supported).
+**Requirements:** Python 3.9+ (3.13+ supported)
 
 ```sh
 # 1. Clone the repository
@@ -235,229 +196,51 @@ python invisible.py
 
 ## 🌐 Using the Web App
 
-
-### 🕶️ Invisible Mode (Multi-Color)
-
-| Step | Action |
-|---|---|
-| 1 | Stand away from the camera and click **Capture Background** |
-| 2 | Click on your cloak in the live video to auto-detect its color (for the first color slot) |
-| 3 | Click **＋ Add Color** to add a second/third cloak color (up to 6) |
-| 4 | Click on the new cloak color in the video to auto-detect it (each chip is editable) |
-| 5 | Adjust the **Sensitivity** slider if needed |
-| 6 | Fine-tune the HSV sliders for each color slot manually for better accuracy |
-| 7 | Choose a fun **effect** (pixelate, blur, cartoon) |
-| 8 | Save settings as a **profile** for reuse (all cloak colors are saved) |
-| 9 | Click **Start** and hold up your cloak(s)! |
-
-### 🌄 Teleport Mode
-
-| Step | Action |
-|---|---|
-| 1 | Click **Teleport** in the mode toggle |
-| 2 | Select a built-in scene (🏖️ Beach, 🚀 Space, 🌲 Forest, 🌅 Sunset, 🌃 City) |
-| 3 | Or click **Upload your own** to use any photo as background |
-| 4 | Click on your cloak in the live video to pick its color |
-| 5 | Click **Start** — your cloak now shows the virtual scene! |
-
----
-
-
-*Say **Evanesco** 🧙 and disappear — with any color cloak!*
-
----
-
-## 💡 How It Works
-
-The invisibility effect works using **HSV (Hue, Saturation, Value) color masking**:
-
-1. A background frame is captured when the cloak is absent.
-2. Each new frame is analyzed in HSV color space to detect the cloak color.
-3. Pixels matching the cloak color are replaced with the corresponding background pixels.
-4. The result is a seamless "invisible" effect — the person holding the cloak appears to vanish.
-
----
-
-## 🗂 Project Structure
-
-```
-Invisible-Cloak/
-│
-├── app.py                  ← Flask web app (main entry point)
-├── cloak_gui.py            ← PyQt5 desktop GUI (alternative)
-├── invisible.py            ← Classic command-line invisibility script
-├── color_range_detector.py ← Classic command-line HSV color picker
-│
-├── templates/
-│   └── index.html          ← Web UI HTML template
-│
-├── static/
-│   ├── style.css           ← Web UI stylesheet
-│   └── script.js           ← Web UI JavaScript logic
-│
-├── requirements.txt        ← Python dependencies
-├── profiles.json           ← Saved color profiles (auto-generated)
-└── range.pickle            ← Saved HSV range (auto-generated)
-```
-
----
-
-## 📄 File Descriptions
-
-### `app.py` — Flask Web Backend
-The main entry point for the **web application**. It:
-- Streams live webcam video to the browser via MJPEG (`/video_feed`).
-- Provides REST API endpoints for all actions:
-  - `POST /capture_background` — Captures the background frame.
-  - `POST /toggle` — Starts or stops the invisibility effect.
-  - `POST /set_hsv` — Updates the HSV color range from sliders.
-  - `POST /set_effect` — Switches the visual effect (none/pixelate/blur/cartoon).
-  - `POST /pick_color` — Auto-detects HSV values from a clicked pixel on the video.
-  - `GET /profiles` — Returns all saved color profiles.
-  - `POST /save_profile` — Saves current HSV settings as a named profile.
-  - `POST /load_profile` — Loads a previously saved profile.
-  - `POST /delete_profile` — Deletes a saved profile.
-- Automatically opens the browser when started.
-- Uses a background thread to safely share the latest video frame.
-
----
-
-### `templates/index.html` — Web UI Layout
-The HTML template served by Flask. It contains:
-- A **live video feed** panel (click anywhere to pick a color).
-- **HSV sliders** to fine-tune the cloak color range.
-- A **sensitivity slider** to control color tolerance when clicking to pick.
-- An **effect selector** (none, pixelate, blur, cartoon).
-- Buttons to **capture background**, **start/stop** the effect.
-- A **profiles panel** to save, load, and delete named color settings.
-- A status badge (ON/OFF) in the header.
-
----
-
-### `static/style.css` — Web UI Styles
-A clean, minimal CSS stylesheet that gives the web app a modern look:
-- Responsive two-column layout (video + controls panel).
-- Custom-styled sliders, buttons, cards, and profile list items.
-- Color-coded status indicators and smooth hover transitions.
-
----
-
-### `static/script.js` — Web UI JavaScript
-Handles all frontend interactivity without any frameworks:
-- Listens to slider changes and debounces HSV updates to the server.
-- Handles button clicks for capture, toggle, effect selection, and profiles.
-- Sends `(x, y)` click coordinates to the server to auto-pick HSV values.
-- Dynamically renders the saved profiles list with load/delete buttons.
-- Updates slider labels and the status badge in real time.
-
----
-
-### `cloak_gui.py` — PyQt5 Desktop GUI
-A standalone desktop application (alternative to the web app). Features:
-- Live camera preview inside the GUI window.
-- Click on the preview image to auto-pick the cloak color.
-- HSV sliders for manual fine-tuning.
-- Effect dropdown (none, pixelate, blur, cartoon).
-- Buttons to capture background, start/stop invisibility, and save HSV range to `range.pickle`.
-
----
-
-### `invisible.py` — Classic Invisibility Script
-The original command-line invisibility script. It:
-- Loads HSV bounds from `range.pickle` (saved by `color_range_detector.py`).
-- Captures the background over the first 60 frames.
-- Applies the cloak mask each frame and blends background pixels.
-- Supports effect switching with the `e` key and quit with `q`.
-- Designed for users who prefer running scripts directly without a GUI.
-
----
-
-### `color_range_detector.py` — Classic HSV Color Picker
-A PyQt5 GUI tool for calibrating the cloak color. It:
-- Opens a live webcam feed with an HSV preview overlay.
-- Shows six sliders (H/S/V min and max) to define the color range.
-- Renders a real-time preview of the mask on the video.
-- Saves the chosen HSV range to `range.pickle` when you click **Save Range**.
-- Used together with `invisible.py` in the classic workflow.
-
----
-
-### `requirements.txt` — Python Dependencies
-
-| Package | Purpose |
-|---|---|
-| `opencv-python` | Webcam capture, image processing, HSV masking |
-| `opencv-contrib-python` | Extra OpenCV modules |
-| `numpy` | Array operations for frame manipulation |
-| `flask` | Web server and API for the web app |
-| `PyQt5` | Desktop GUI (cloak_gui.py & color_range_detector.py) |
-| `imutils` | Convenience functions for OpenCV |
-| `scipy` | Scientific computing utilities |
-
----
-
-## ⚙️ Setup & Installation
-
-**Requirements:** Python 3.9 or newer (Python 3.13+ supported).
-
-```sh
-# 1. Clone the repository
-git clone https://github.com/MahyudeenShahid/Invisible-Cloak.git
-cd Invisible-Cloak
-
-# 2. Create a virtual environment
-python -m venv .venv
-
-# 3. Activate it
-# Windows:
-.venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
-
-# 4. Install dependencies
-pip install -r requirements.txt
-```
-
----
-
-## 🚀 How to Run
-
-### Option 1 — Web App (Recommended)
-```sh
-python app.py
-```
-Browser opens automatically at **http://127.0.0.1:5000**
-
-### Option 2 — Desktop GUI
-```sh
-python cloak_gui.py
-```
-
-### Option 3 — Classic Scripts
-```sh
-# Step 1: Pick your cloak color
-python color_range_detector.py
-
-# Step 2: Run the invisibility effect
-python invisible.py
-```
-
----
-
-## 🌐 Using the Web App
+### 🕶️ Cloak Mode (Multi-Color)
 
 | Step | Action |
 |---|---|
 | 1 | Stand away from the camera and click **Capture Background** |
 | 2 | Click on your cloak in the live video to auto-detect its color |
-| 3 | Adjust the **Sensitivity** slider if needed |
-| 4 | Fine-tune the HSV sliders manually for better accuracy |
-| 5 | Choose a fun **effect** (pixelate, blur, cartoon) |
-| 6 | Save settings as a **profile** for reuse |
-| 7 | Click **Start Invisibility** and hold up your cloak! |
+| 3 | Click **＋ Add Color** to add more cloak colors (up to 6) |
+| 4 | Adjust **Sensitivity** and fine-tune HSV sliders if needed |
+| 5 | Select an effect (pixelate, blur, cartoon) |
+| 6 | Save settings as a profile for reuse |
+| 7 | Click **Initialize System** to start |
+
+### 🌄 Virtual Mode
+
+| Step | Action |
+|---|---|
+| 1 | Switch to **Virtual** mode |
+| 2 | Choose a built-in scene or upload a custom background |
+| 3 | Pick cloak colors like in Cloak mode |
+| 4 | Start the system |
+
+### 🤖 Smart AI Mode
+
+| Step | Action |
+|---|---|
+| 1 | Switch to **Smart AI** mode |
+| 2 | Choose **Blur**, **Scene**, or **Solid** background type |
+| 3 | (Optional) Enable **AI refine mask** and adjust **Temporal smoothing** |
+| 4 | Start the system |
 
 ---
 
-*Say **Evanesco** 🧙 and disappear!*
+## ✅ Requirements
 
+| Package | Purpose |
+|---|---|
+| `opencv-python` | Webcam capture, image processing, HSV masking |
+| `opencv-contrib-python` | Extra OpenCV modules |
+| `numpy` | Array operations |
+| `flask` | Web server and API |
+| `mediapipe` | Smart AI segmentation |
+| `PyQt5` | Desktop GUI tools |
+| `imutils` | Convenience functions |
+| `scipy` | Scientific computing utilities |
 
+---
+
+*Say **Evanesco** 🧙 and disappear — now with AI precision!*

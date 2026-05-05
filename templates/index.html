@@ -159,6 +159,28 @@
           </div>
         </div>
 
+        <!-- Pipeline Enhancements -->
+        <div id="pipeline-controls" class="pipeline-controls" style="display:none">
+          <div class="pipeline-row">
+            <div class="pipeline-labels">
+              <span>AI refine mask</span>
+              <span class="pipeline-note">Use person mask to clean HSV output</span>
+            </div>
+            <label class="switch" title="Enable AI refinement">
+              <input type="checkbox" id="toggle-ai-refine" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="slider-row">
+            <label>
+              <span>Temporal smoothing window</span>
+              <span id="lbl-temporal-window">4</span>
+            </label>
+            <input type="range" id="temporal-window" min="1" max="12" value="4" step="1" />
+          </div>
+          <div class="subpanel-hint">Higher values reduce flicker but add a small delay.</div>
+        </div>
+
         <button class="btn btn-primary" id="btn-toggle">
           <span id="toggle-icon">▶</span> <span id="toggle-text">Initialize System</span>
         </button>

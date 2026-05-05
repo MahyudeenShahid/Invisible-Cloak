@@ -4,6 +4,7 @@
   const sliderIds = ['h_min', 'h_max', 's_min', 's_max', 'v_min', 'v_max'];
   let debounceTimer = null;
   let currentRangeIdx = 0;
+  let pipelineDebounce = null;
 
   // ─── Utility ────────────────────────────────────────────────────
   function showMsg(text, isError = false) {
@@ -141,6 +142,57 @@
     $('sens-val').textContent = $('sensitivity').value;
   });
 
+  // ─── Pipeline Controls ─────────────────────────────────────────
+  const aiRefineToggle = $('toggle-ai-refine');
+  const temporalWindow = $('temporal-window');
+  const temporalLabel = $('lbl-temporal-window');
+  const pipelineControls = $('pipeline-controls');
+
+  function updatePipelineVisibility() {
+    if (pipelineControls) {
+      pipelineControls.style.display = currentMode === 'smart' ? '' : 'none';
+    }
+  }
+
+  function setPipelineDisabled(isDisabled) {
+    if (aiRefineToggle) aiRefineToggle.disabled = isDisabled || aiRefineToggle.dataset.forceDisabled === 'true';
+    if (temporalWindow) temporalWindow.disabled = isDisabled;
+  }
+
+  async function initPipelineControls() {
+    const d = await (await fetch('/pipeline_status')).json();
+    if (temporalWindow && temporalLabel) {
+      temporalWindow.value = d.temporal_window;
+      temporalLabel.textContent = d.temporal_window;
+    }
+    if (aiRefineToggle) {
+      aiRefineToggle.checked = !!d.use_ai_refine;
+      if (!d.mediapipe_available) {
+        aiRefineToggle.checked = false;
+        aiRefineToggle.disabled = true;
+        aiRefineToggle.dataset.forceDisabled = 'true';
+      }
+    }
+    updatePipelineVisibility();
+  }
+
+  if (aiRefineToggle) {
+    aiRefineToggle.addEventListener('change', () => {
+      post('/set_pipeline', { use_ai_refine: aiRefineToggle.checked });
+    });
+  }
+
+  if (temporalWindow) {
+    temporalWindow.addEventListener('input', () => {
+      const value = +temporalWindow.value;
+      if (temporalLabel) temporalLabel.textContent = value;
+      clearTimeout(pipelineDebounce);
+      pipelineDebounce = setTimeout(() => {
+        post('/set_pipeline', { temporal_window: value });
+      }, 150);
+    });
+  }
+
   // ─── Capture Background ─────────────────────────────────────────
   $('btn-capture').addEventListener('click', async () => {
     const originalHtml = $('btn-capture').innerHTML;
@@ -160,6 +212,8 @@
       $('panel-invisible').style.display = currentMode === 'invisible' ? '' : 'none';
       $('panel-virtual').style.display   = currentMode === 'virtual'   ? '' : 'none';
       $('panel-smart').style.display     = currentMode === 'smart'     ? '' : 'none';
+      updatePipelineVisibility();
+      setPipelineDisabled(false);
       // stop if running
       if (running) {
         running = false;
@@ -323,6 +377,7 @@
     const d = await post('/toggle', {});
     if (d.status === 'error') { showMsg(d.message, true); return; }
     running = d.running;
+    setPipelineDisabled(running);
     $('toggle-icon').textContent = running ? '⏹' : '▶';
     $('toggle-text').textContent = running ? 'Terminate Feed' : 'Initialize System';
     $('btn-toggle').className = running ? 'btn btn-danger' : 'btn btn-primary';
@@ -436,4 +491,5 @@
   // Load initial state
   initColorRanges();
   loadProfiles();
+  initPipelineControls();
 })();
