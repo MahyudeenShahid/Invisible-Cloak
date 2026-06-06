@@ -1,0 +1,54 @@
+{
+    "perfect": {
+        "baseline": {
+            "iou": 0.9792988458456942,
+            "fps": 474.3908032318221,
+            "latency_ms": 2.107966666274782,
+            "transition_percent": 0.0,
+            "temporal_variance": 0.0
+        },
+        "him": {
+            "iou": 0.9999115533443894,
+            "fps": 17.53430191645566,
+            "latency_ms": 57.03107000008458,
+            "transition_percent": 1.1432291666666667,
+            "temporal_variance": 3.470887133261158e-09
+        }
+    },
+    "shadow": {
+        "baseline": {
+            "iou": 0.9792988458456942,
+            "latency_ms": 1.8278999993829832,
+            "temporal_variance": 0.0
+        },
+        "him": {
+            "iou": 0.9999115533443894,
+            "latency_ms": 49.98392000040136,
+            "temporal_variance": 3.470887133261158e-09
+        }
+    },
+    "noise": {
+        "baseline": {
+            "iou": 0.9786207564809529,
+            "latency_ms": 1.7792233331419993,
+            "temporal_variance": 9.130496619036421e-05
+        },
+        "him": {
+            "iou": 0.9994997857098118,
+            "latency_ms": 55.28148666683895,
+            "temporal_variance": 2.5229940092685865e-06
+        }
+    },
+    "temporal": {
+        "baseline": {
+            "iou": 0.9792494545791922,
+            "latency_ms": 2.190103333365793,
+            "temporal_variance": 0.00494416244328022
+        },
+        "him": {
+            "iou": 0.9667246303154244,
+            "latency_ms": 65.08952000003774,
+            "temporal_variance": 0.0013342455495148897
+        }
+    }
+}
