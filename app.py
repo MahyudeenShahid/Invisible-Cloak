@@ -253,7 +253,9 @@ def set_effect():
 def pick_color():
     data = request.json
     with state['lock']:
-        frame = state.get('raw_frame')
+        frame = state.get('pp_frame')
+        if frame is None:
+            frame = state.get('raw_frame')
         if frame is None:
             frame = state.get('frame')
     if frame is None:
@@ -322,7 +324,7 @@ def load_profile():
                 state['color_ranges'] = p['color_ranges']
             else:
                 state['color_ranges'] = [
-                    {'hsv_min': p.get('hsv_min', [0, 0, 0]), 'hsv_max': p.get('hsv_max', [179, 255, 255])}
+                    {'hsv_min': p.get('hsv_min', [0, 0, 0]), 'hsv_max': p.get('hsv_max', [0, 0, 0])}
                 ]
             state['active_range_idx'] = 0
             state['effect'] = p.get('effect', 'none')
@@ -357,7 +359,7 @@ def get_color_ranges():
 def add_color_range():
     if len(state['color_ranges']) >= 6:
         return jsonify({'status': 'error', 'message': 'Maximum 6 colors allowed'})
-    state['color_ranges'].append({'hsv_min': [0, 0, 0], 'hsv_max': [179, 255, 255]})
+    state['color_ranges'].append({'hsv_min': [0, 0, 0], 'hsv_max': [0, 0, 0]})
     new_idx = len(state['color_ranges']) - 1
     state['active_range_idx'] = new_idx
     return jsonify({'status': 'ok', 'ranges': state['color_ranges'], 'active_idx': new_idx})

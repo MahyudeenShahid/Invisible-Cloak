@@ -74,7 +74,7 @@ def camera_thread_fn(state, segmentor, mp, mediapipe_available):
 
                     mask_f = mask.astype(np.float32) / 255.0
                     if state.get('use_ai_refine', False) and person_mask is not None:
-                        mask_f = mask_f * person_mask
+                        mask_f = mask_f * (1.0 - person_mask)
                     mask_f = temporal_smooth_mask(mask_f, state.get('mask_history'), window)
 
                     mask3 = np.stack([mask_f, mask_f, mask_f], axis=2)
@@ -110,6 +110,7 @@ def camera_thread_fn(state, segmentor, mp, mediapipe_available):
 
         with state['lock']:
             state['raw_frame'] = raw.copy()
+            state['pp_frame'] = pp_raw.copy()
             state['frame'] = processed.copy()
 
 

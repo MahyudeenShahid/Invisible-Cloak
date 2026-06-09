@@ -21,7 +21,7 @@ def create_state():
         'background': None,
         'running': False,
         'color_ranges': [
-            {'hsv_min': [0, 0, 0], 'hsv_max': [179, 255, 255]},
+            {'hsv_min': [0, 0, 0], 'hsv_max': [0, 0, 0]},
         ],
         'active_range_idx': 0,
         'effect': 'none',
